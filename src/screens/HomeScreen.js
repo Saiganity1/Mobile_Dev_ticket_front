@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, TextInput, Button, Text, Alert, TouchableOpacity, Platform } from 'react-native';
+import { View, TextInput, Button, Text, Alert, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,17 +19,8 @@ export default function HomeScreen({ navigation }) {
       const admin = v === '1';
       setIsAdmin(admin);
       if (admin) {
-        // load admin tickets for messenger view
-        const token = await AsyncStorage.getItem('authToken');
-        try {
-          const res = await fetch(`${API_BASE}/admin/tickets/`, { headers: token ? { Authorization: `Token ${token}` } : {} });
-          if (res.ok) {
-            const data = await res.json();
-            // keep only open tickets and map preview
-            const open = data.filter(t => t.is_open).map(t => ({ uid: t.uid, title: t.title, name: `${t.first_name} ${t.last_name}`, unread: t.unread_count || 0, last_at: t.updated_at }));
-            setTickets(open);
-          }
-        } catch (e) { console.log('Failed load admin tickets', e); }
+  // load admin tickets for messenger view (respecting adminFilter)
+  await loadAdminTickets(adminFilter);
       }
       else {
         // load user's own ongoing reports (open tickets)
@@ -50,6 +41,42 @@ export default function HomeScreen({ navigation }) {
       }
     })();
   }, []);
+
+  const [adminFilter, setAdminFilter] = useState('not_complete'); // 'not_complete' | 'all' | 'completed'
+  const [loadingAdmin, setLoadingAdmin] = useState(false);
+
+  const loadAdminTickets = async (which = 'not_complete') => {
+    setLoadingAdmin(true);
+    const token = await AsyncStorage.getItem('authToken');
+    const headers = token ? { Authorization: `Token ${token}` } : {};
+    try {
+      if (which === 'not_complete') {
+        const res = await fetch(`${API_BASE}/admin/tickets/pending/`, { headers });
+        if (!res.ok) { setTickets([]); setLoadingAdmin(false); return; }
+        const data = await res.json();
+        const open = Array.isArray(data) ? data.map(t => ({ uid: t.uid, title: t.title, name: `${t.first_name} ${t.last_name}`, unread: t.unread_count || 0, last_at: t.updated_at, is_open: t.is_open })) : [];
+        setTickets(open.filter(t => t.is_open));
+      } else {
+        const res = await fetch(`${API_BASE}/admin/tickets/`, { headers });
+        if (!res.ok) { setTickets([]); setLoadingAdmin(false); return; }
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        const filtered = which === 'completed' ? list.filter(t => t.is_open === false) : list;
+        const mapped = filtered.map(t => ({ uid: t.uid, title: t.title, name: `${t.first_name} ${t.last_name}`, unread: t.unread_count || 0, last_at: t.updated_at, is_open: t.is_open }));
+        setTickets(mapped);
+      }
+    } catch (e) {
+      console.log('Failed load admin tickets', e);
+      setTickets([]);
+    } finally {
+      setLoadingAdmin(false);
+    }
+  };
+
+  // reload admin tickets when filter changes
+  useEffect(() => {
+    if (isAdmin) loadAdminTickets(adminFilter);
+  }, [adminFilter, isAdmin]);
 
   const loadOpenCount = async () => {
     const token = await AsyncStorage.getItem('authToken');
@@ -85,8 +112,28 @@ export default function HomeScreen({ navigation }) {
   const pickFile = async () => {
     const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
     if (res.type === 'success') {
-      setAttachments((s) => [...s, res]);
+      // ensure we have a size field; some platforms provide `size` directly
+      let size = res.size;
+      try {
+        if (size == null && res.uri) {
+          const r = await fetch(res.uri);
+          const b = await r.blob();
+          size = b.size;
+        }
+      } catch (e) {
+        // ignore size fetch errors
+      }
+      setAttachments((s) => [...s, { ...res, size }]);
     }
+  };
+
+  const fmtSize = (bytes) => {
+    if (!bytes && bytes !== 0) return '';
+    const b = Number(bytes);
+    if (isNaN(b)) return '';
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / (1024 * 1024)).toFixed(2)} MB`;
   };
 
   const removeAttachment = (index) => {
@@ -145,7 +192,18 @@ export default function HomeScreen({ navigation }) {
     return (
       <View style={{ flex: 1, padding: 12 }}>
         <Button title="Logout" onPress={async () => { await AsyncStorage.removeItem('authToken'); await AsyncStorage.removeItem('isAdmin'); navigation.replace('Login'); }} />
-        <Text style={{ fontWeight: 'bold', marginTop: 8, marginBottom: 8 }}>Admin Notifications</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', backgroundColor: '#eef', borderRadius: 20, padding: 4 }}>
+              {['not_complete','all','completed'].map(k => (
+                <TouchableOpacity key={k} onPress={() => setAdminFilter(k)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: adminFilter === k ? '#007bff' : 'transparent', marginRight: 6 }}>
+                  <Text style={{ color: adminFilter === k ? '#fff' : '#007bff', fontWeight: '600' }}>{k === 'not_complete' ? 'Not Complete' : (k === 'completed' ? 'Completed' : 'All')}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{ width: 12 }} />
+            {loadingAdmin ? <ActivityIndicator size="small" /> : null}
+          </View>
+          <Text style={{ fontWeight: 'bold', marginTop: 0, marginBottom: 8 }}>Admin Notifications</Text>
         {tickets.length === 0 && <Text>No pending tickets</Text>}
         {tickets.map(t => (
           <TouchableTicket key={t.uid} ticket={t} navigation={navigation} />
@@ -154,21 +212,10 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  // For regular users show ongoing reports above the form
-  const hasOngoing = tickets && tickets.length > 0;
+  // For regular users we keep a clean page; header has Open reports button
 
   return (
     <View style={{ padding: 16 }}>
-      {hasOngoing && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Your ongoing reports</Text>
-          {tickets.map(t => (
-            <TouchableTicket key={t.uid} ticket={t} navigation={navigation} />
-          ))}
-          <View style={{ height: 8 }} />
-          <Button title="View all reports" onPress={() => navigation.navigate('MyReports')} />
-        </View>
-      )}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Button title="Logout" onPress={async () => { await AsyncStorage.removeItem('authToken'); await AsyncStorage.removeItem('isAdmin'); navigation.replace('Login'); }} />
         <TouchableOpacity onPress={() => navigation.navigate('MyReports')} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -191,7 +238,7 @@ export default function HomeScreen({ navigation }) {
       <Button title={'Pick attachment'} onPress={pickFile} />
       {attachments.map((a, idx) => (
         <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-          <Text style={{ flex: 1 }}>{a.name}</Text>
+          <Text style={{ flex: 1 }}>{a.name} {a.size ? `(${fmtSize(a.size)})` : ''}</Text>
           <Button title="Remove" onPress={() => removeAttachment(idx)} />
         </View>
       ))}
