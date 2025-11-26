@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, TextInput, Button, Text, Alert } from 'react-native';
+import styles, { global, colors } from '../styles';
+import Loading from '../components/Loading';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -46,17 +48,23 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <View style={{ padding: 16 }}>
-  <Text>Username</Text>
-  <TextInput value={username} onChangeText={setUsername} style={{ borderWidth: 1, marginBottom: 8 }} />
-  {errors.username && <Text style={{ color: 'red' }}>{Array.isArray(errors.username) ? errors.username.join(', ') : String(errors.username)}</Text>}
-      <Text>Password</Text>
-      <TextInput value={password} onChangeText={setPassword} secureTextEntry style={{ borderWidth: 1, marginBottom: 8 }} />
-  {errors.password && <Text style={{ color: 'red' }}>{Array.isArray(errors.password) ? errors.password.join(', ') : String(errors.password)}</Text>}
-  {errors.detail && <Text style={{ color: 'red' }}>{errors.detail}</Text>}
-      <Button title={loading ? 'Logging in...' : 'Login'} onPress={login} disabled={loading} />
-      <View style={{ height: 12 }} />
-      <Button title="Register" onPress={() => navigation.navigate('Register')} />
+    <View style={global.container}>
+      <View style={global.card}>
+        <Text style={global.header}>Login</Text>
+        <Text style={global.subText}>Sign in to your account</Text>
+        <View style={{ height: 12 }} />
+        <Text>Username</Text>
+        <TextInput value={username} onChangeText={setUsername} style={global.input} />
+        {errors.username && <Text style={{ color: colors.danger }}>{Array.isArray(errors.username) ? errors.username.join(', ') : String(errors.username)}</Text>}
+        <Text>Password</Text>
+        <TextInput value={password} onChangeText={setPassword} secureTextEntry style={global.input} />
+        {errors.password && <Text style={{ color: colors.danger }}>{Array.isArray(errors.password) ? errors.password.join(', ') : String(errors.password)}</Text>}
+        {errors.detail && <Text style={{ color: colors.danger }}>{errors.detail}</Text>}
+        <View style={{ height: 12 }} />
+        {loading ? <Loading text="Logging in..." /> : <Button title="Login" onPress={login} />}
+        <View style={{ height: 12 }} />
+        <Button title="Register" onPress={() => navigation.navigate('Register')} />
+      </View>
     </View>
   );
 }

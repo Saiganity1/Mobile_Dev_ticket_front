@@ -7,7 +7,10 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import AdminPanel from './src/screens/AdminPanel';
 import MyReportsScreen from './src/screens/MyReportsScreen';
+import BubbleSettings from './src/screens/BubbleSettings';
+import ReceiptScreen from './src/screens/ReceiptScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ThemeProvider } from './src/styles';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,15 +30,19 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName={initialRoute}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Register" component={RegisterScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
-  <Stack.Screen name="Chat" component={ChatScreen} />
-  <Stack.Screen name="Admin" component={AdminPanel} />
-  <Stack.Screen name="MyReports" component={MyReportsScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <ThemeProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName={initialRoute}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="Admin" component={AdminPanel} />
+          <Stack.Screen name="BubbleSettings" component={BubbleSettings} />
+          <Stack.Screen name="Receipt" component={ReceiptScreen} />
+          <Stack.Screen name="MyReports" component={MyReportsScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ThemeProvider>
   );
 }

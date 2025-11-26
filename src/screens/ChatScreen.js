@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TextInput, Button, FlatList, Platform, TouchableOpacity, Linking, Alert, ToastAndroid, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, FlatList, Platform, TouchableOpacity, Linking, Alert, ToastAndroid, Animated, StyleSheet } from 'react-native';
+import Loading from '../components/Loading';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import styles, { useThemedStyles, colors } from '../styles';
 
 const API_BASE = Platform.OS === 'web' ? `http://${window.location.hostname}:8000/api` : 'http://10.0.2.2:8000/api';
 
@@ -11,36 +13,36 @@ export default function ChatScreen({ route, navigation }) {
   const [ticketMeta, setTicketMeta] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const { s } = useThemedStyles();
   const timerRef = useRef(null);
+  const [bubbleUserBg, setBubbleUserBg] = useState(null);
+  const [bubbleUserText, setBubbleUserText] = useState(null);
+  const [bubbleAdminBg, setBubbleAdminBg] = useState(null);
+  const [bubbleAdminText, setBubbleAdminText] = useState(null);
 
   const fetchMessages = async () => {
     if (!ticketUid) return;
     try {
-  const token = await AsyncStorage.getItem('authToken');
-  if (!token) { navigation.replace('Login'); return; }
-  const isAdminVal = (await AsyncStorage.getItem('isAdmin')) === '1';
-  setIsAdmin(isAdminVal);
-      const url = isAdmin ? `${API_BASE}/admin/tickets/${ticketUid}/` : `${API_BASE}/tickets/${ticketUid}/`;
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) { navigation.replace('Login'); return; }
+      const isAdminVal = (await AsyncStorage.getItem('isAdmin')) === '1';
+      setIsAdmin(isAdminVal);
+      const url = isAdminVal ? `${API_BASE}/admin/tickets/${ticketUid}/` : `${API_BASE}/tickets/${ticketUid}/`;
       const headers = token ? { Authorization: `Token ${token}` } : {};
       const res = await fetch(url, { headers });
       if (res.status === 401 || res.status === 403) {
-        // not authorized
         console.log('Chat fetch unauthorized', res.status);
         return;
       }
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages || []);
-        setAttachments(data.attachments || []);
-        // capture ticket meta like is_open
-        setTicketMeta({ is_open: data.is_open, uid: data.uid });
-      } else {
-        console.log('Failed to fetch chat', res.status);
+  setMessages(data.messages || []);
+  setAttachments(data.attachments || []);
+  setTicketMeta({ is_open: data.is_open, uid: data.uid, ticket_number: data.ticket_number || data.id });
       }
     } catch (e) {
-      // ignore
+      console.log('fetchMessages error', e);
     }
   };
 
@@ -50,40 +52,32 @@ export default function ChatScreen({ route, navigation }) {
     return () => clearInterval(timerRef.current);
   }, [ticketUid]);
 
-  // update header button when meta or admin status changes
   useEffect(() => {
-    if (!navigation) return;
-    if (!isAdmin) {
-      navigation.setOptions({ headerRight: () => null });
-      return;
-    }
-    // show button for admins
-    navigation.setOptions({
-      headerRight: () => (
-        <Button title={ticketMeta && ticketMeta.is_open === false ? 'Reopen Report' : 'Mark Report Complete'} onPress={() => {
-          const action = (ticketMeta && ticketMeta.is_open === false) ? 'reopen' : 'close';
-          const msg = action === 'close' ? 'Mark this report complete? Users will be unable to send further messages.' : 'Reopen this report? Users will be able to send messages again.';
-          if (Platform.OS === 'web') {
-            if (window.confirm(msg)) adminToggleComplete();
-          } else {
-            Alert.alert('Confirm', msg, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: action === 'close' ? 'Close' : 'Reopen', onPress: () => adminToggleComplete() }
-            ]);
-          }
-        }} />
-      )
-    });
-  }, [navigation, isAdmin, ticketMeta]);
+    (async () => {
+      try {
+        const ub = await AsyncStorage.getItem('bubbleUser');
+        const ut = await AsyncStorage.getItem('bubbleUserText');
+        const ab = await AsyncStorage.getItem('bubbleAdmin');
+        const at = await AsyncStorage.getItem('bubbleAdminText');
+        if (ub) setBubbleUserBg(ub);
+        if (ut) setBubbleUserText(ut);
+        if (ab) setBubbleAdminBg(ab);
+        if (at) setBubbleAdminText(at);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // header actions intentionally removed; controls render under ticket title so they stay in the layout
 
   const send = async () => {
     if (!text) return;
-    // prevent sending if ticket closed (for both admin and user)
     if (ticketMeta && ticketMeta.is_open === false) return;
     setSending(true);
     try {
       const token = await AsyncStorage.getItem('authToken');
-  const isAdminVal = (await AsyncStorage.getItem('isAdmin')) === '1';
+      const isAdminVal = (await AsyncStorage.getItem('isAdmin')) === '1';
       const sender = isAdminVal ? 'admin' : 'user';
       const res = await fetch(`${API_BASE}/messages/create/`, {
         method: 'POST',
@@ -95,7 +89,7 @@ export default function ChatScreen({ route, navigation }) {
         fetchMessages();
       }
     } catch (e) {
-      // ignore
+      console.log('send error', e);
     } finally {
       setSending(false);
     }
@@ -105,15 +99,10 @@ export default function ChatScreen({ route, navigation }) {
     if (!filePath) return;
     let url = filePath;
     if (!/^https?:\/\//i.test(filePath)) {
-      // make absolute against API base
       if (filePath.startsWith('/')) url = `${API_BASE}${filePath}`;
       else url = `${API_BASE}/${filePath}`;
     }
-    try {
-      await Linking.openURL(url);
-    } catch (e) {
-      console.log('Failed to open attachment', e);
-    }
+    try { await Linking.openURL(url); } catch (e) { console.log('Failed to open attachment', e); }
   };
 
   const fmtSize = (bytes) => {
@@ -136,51 +125,133 @@ export default function ChatScreen({ route, navigation }) {
         body: JSON.stringify({ action }),
       });
       if (res.ok) {
-        // flip locally and refresh messages
-  setTicketMeta(m => ({ ...m, is_open: !m.is_open }));
-  fetchMessages();
-  if (Platform.OS === 'android') ToastAndroid.show('Action performed', ToastAndroid.SHORT);
-  else Alert.alert('Success', 'Action performed');
+        setTicketMeta(m => ({ ...m, is_open: !m.is_open }));
+        fetchMessages();
+        if (Platform.OS === 'android') ToastAndroid.show('Action performed', ToastAndroid.SHORT);
+        else Alert.alert('Success', 'Action performed');
       } else {
-  if (Platform.OS === 'android') ToastAndroid.show('Action failed', ToastAndroid.SHORT);
-  else Alert.alert('Error', 'Action failed');
+        if (Platform.OS === 'android') ToastAndroid.show('Action failed', ToastAndroid.SHORT);
+        else Alert.alert('Error', 'Action failed');
       }
     } catch (e) {
-  console.log('admin action failed', e);
-  if (Platform.OS === 'android') ToastAndroid.show('Action failed', ToastAndroid.SHORT);
-  else Alert.alert('Error', 'Action failed');
+      console.log('admin action failed', e);
+      if (Platform.OS === 'android') ToastAndroid.show('Action failed', ToastAndroid.SHORT);
+      else Alert.alert('Error', 'Action failed');
     }
   };
 
+  const getInitials = (item) => {
+    if (!item) return '';
+    if (item.sender_name) return item.sender_name.split(' ').map(p => p[0]).slice(0,2).join('').toUpperCase();
+    if (item.sender === 'admin') return 'AD';
+    if (item.sender === 'user') return 'US';
+    return String(item.sender || '?').slice(0,2).toUpperCase();
+  };
+
+  const MessageBubble = ({ item }) => {
+    const meIsSender = (item.sender === 'admin') === isAdmin;
+    const anim = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+      Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    }, []);
+
+    const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
+    const opacity = anim;
+
+    const userBg = bubbleUserBg || (s.chat && s.chat.bubbleIncoming && s.chat.bubbleIncoming.backgroundColor) || '#eef6ff';
+    const userText = bubbleUserText || (s.chat && s.chat.bubbleIncoming && s.chat.bubbleIncoming.color) || '#0b2f6b';
+    const adminBg = bubbleAdminBg || (s.chat && s.chat.bubbleOutgoing && s.chat.bubbleOutgoing.backgroundColor) || '#2b6cb0';
+    const adminText = bubbleAdminText || '#fff';
+
+    return (
+      <Animated.View style={{ opacity, transform: [{ translateY }], flexDirection: 'row', justifyContent: meIsSender ? 'flex-end' : 'flex-start', paddingHorizontal: 8, marginVertical: 6 }}>
+        {!meIsSender && (
+          <View style={localStyles.avatarWrap}>
+            <View style={localStyles.avatar}>
+              <Text style={localStyles.avatarText}>{getInitials(item)}</Text>
+            </View>
+          </View>
+        )}
+
+        <View style={[{ maxWidth: '78%', borderRadius: 12, padding: 10, backgroundColor: meIsSender ? adminBg : userBg }]}> 
+          <Text style={{ color: meIsSender ? adminText : userText, fontWeight: '600' }}>{item.content}</Text>
+          <Text style={[s.chat.bubbleMeta, { color: meIsSender ? adminText : (s.chat && s.chat.bubbleIncoming && s.chat.bubbleIncoming.color) || '#666' }]}>{new Date(item.created_at || item.updated_at || item.sent_at || item.timestamp || '').toLocaleString()}</Text>
+        </View>
+
+        {meIsSender && (
+          <View style={localStyles.avatarWrapRight}>
+            <View style={[localStyles.avatar, { backgroundColor: adminBg }]}>
+              <Text style={localStyles.avatarText}>{getInitials(item)}</Text>
+            </View>
+          </View>
+        )}
+      </Animated.View>
+    );
+  };
+
   return (
-    <View style={{ flex: 1, padding: 12 }}>
-      <Text>Ticket: {ticketUid}</Text>
+    <View style={s.container}>
+      <Text style={s.header}>Ticket: {ticketMeta && ticketMeta.ticket_number ? `#${ticketMeta.ticket_number}` : ticketUid}</Text>
+
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8 }}>
+        <View>
+          <Text style={s.subText}>UID: {ticketMeta ? ticketMeta.uid : ticketUid}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => { if (!ticketMeta) return; navigation.navigate('Receipt', { ticketNumber: ticketMeta.ticket_number, ticketUid: ticketMeta.uid }); }} style={{ marginRight: 12 }}>
+            <Text style={{ color: colors.primary, fontWeight: '700' }}>Receipt</Text>
+          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity onPress={() => {
+              const action = (ticketMeta && ticketMeta.is_open === false) ? 'reopen' : 'close';
+              const msg = action === 'close' ? 'Mark this report complete? Users will be unable to send further messages.' : 'Reopen this report? Users will be able to send messages again.';
+              if (Platform.OS === 'web') {
+                if (window.confirm(msg)) adminToggleComplete();
+              } else {
+                Alert.alert('Confirm', msg, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: action === 'close' ? 'Close' : 'Reopen', onPress: () => adminToggleComplete() }
+                ]);
+              }
+            }}>
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>{ticketMeta && ticketMeta.is_open === false ? 'Reopen' : 'Close'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
       {ticketMeta && ticketMeta.is_open === false && !isAdmin && (
-        <View style={{ padding: 8, backgroundColor: '#f0f0f0', borderRadius: 6, marginVertical: 8 }}>
-          <Text style={{ color: '#333', fontWeight: 'bold' }}>This report has been marked completed by an admin. You can no longer send messages.</Text>
+        <View style={[s.card, { backgroundColor: '#fff6f6' }]}> 
+          <Text style={{ color: colors.danger, fontWeight: '700' }}>This report has been marked completed by an admin. You can no longer send messages.</Text>
         </View>
       )}
-      <FlatList data={messages} keyExtractor={(item) => String(item.id)} renderItem={({ item }) => (
-        <View style={{ padding: 8, borderBottomWidth: 1 }}>
-          <Text style={{ fontWeight: 'bold' }}>{item.sender}</Text>
-          <Text>{item.content}</Text>
+
+  <FlatList data={messages} keyExtractor={(item) => String(item.id)} renderItem={({ item }) => <MessageBubble item={item} />} contentContainerStyle={{ paddingVertical: 12 }} style={{ flex: 1 }} />
+
+      {attachments.length > 0 && (
+        <View style={{ flexDirection: 'row', padding: 8 }}>
+          {attachments.map(a => (
+            <TouchableOpacity key={a.id} onPress={() => openAttachment(a.file)} style={s.chat.attachmentPreview}>
+              <Text selectable style={{ color: colors.primary }}>{a.filename || a.file}</Text>
+              <Text style={s.smallText}>{fmtSize(a.size)}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      )} />
+      )}
 
-      <Text style={{ marginTop: 8, fontWeight: 'bold' }}>Attachments</Text>
-      {attachments.length === 0 && <Text>No attachments</Text>}
-      {attachments.map((a) => (
-        <TouchableOpacity key={a.id} onPress={() => openAttachment(a.file)} style={{ paddingVertical: 6 }}>
-          <Text selectable style={{ color: 'blue' }}>{a.filename || a.file}</Text>
-          <Text style={{ color: '#666', fontSize: 12 }}>{fmtSize(a.size)}</Text>
+      <View style={s.chat.inputBar}>
+        <TextInput value={text} onChangeText={setText} placeholder="Message" style={s.chat.inputField} editable={!(ticketMeta && ticketMeta.is_open === false && !isAdmin)} />
+        <TouchableOpacity onPress={send} style={s.chat.sendButton} disabled={sending || (ticketMeta && ticketMeta.is_open === false && !isAdmin)}>
+          {sending ? <Loading /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>}
         </TouchableOpacity>
-      ))}
-
-  <TextInput value={text} onChangeText={setText} placeholder="Message" style={{ borderWidth: 1, marginVertical: 8 }} editable={!(ticketMeta && ticketMeta.is_open === false && !isAdmin)} />
-  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-    <Button title={sending ? 'Sending...' : 'Send'} onPress={send} disabled={sending || (ticketMeta && ticketMeta.is_open === false && !isAdmin)} />
-    {sending ? <ActivityIndicator style={{ marginLeft: 8 }} size="small" /> : null}
-  </View>
+      </View>
     </View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  avatarWrap: { width: 40, paddingHorizontal: 6, justifyContent: 'center' },
+  avatarWrapRight: { width: 40, paddingHorizontal: 6, justifyContent: 'center' },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#999', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontWeight: '700' },
+});
+

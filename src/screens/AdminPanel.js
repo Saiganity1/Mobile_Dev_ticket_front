@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, Alert, ToastAndroid, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, Alert, ToastAndroid, Platform } from 'react-native';
+import Loading from '../components/Loading';
+import styles, { PillToggle, global, colors } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_BASE = Platform.OS === 'web' ? `http://${window.location.hostname}:8000/api` : 'http://10.0.2.2:8000/api';
@@ -60,7 +62,7 @@ export default function AdminPanel({ navigation }) {
         }
         const list = Array.isArray(pendingData) ? pendingData : [];
         const sorted = list.sort((a,b) => (b.unread_count || 0) - (a.unread_count || 0));
-        const mapped = sorted.map(t => ({ uid: t.uid, title: t.title, first_name: t.first_name, last_name: t.last_name, unread_count: t.unread_count || 0, created_at: t.created_at, last_message: (t.messages && t.messages.length) ? t.messages[t.messages.length-1].content : '', is_open: t.is_open }));
+  const mapped = sorted.map(t => ({ uid: t.uid, ticket_number: t.ticket_number || t.id, title: t.title, first_name: t.first_name, last_name: t.last_name, unread_count: t.unread_count || 0, created_at: t.created_at, last_message: (t.messages && t.messages.length) ? t.messages[t.messages.length-1].content : '', is_open: t.is_open }));
         setTickets(mapped);
         setLoading(false);
         return;
@@ -79,7 +81,7 @@ export default function AdminPanel({ navigation }) {
       const list = Array.isArray(allData) ? allData : [];
       const filtered = which === 'completed' ? list.filter(t => t.is_open === false) : list;
       const sorted = filtered.sort((a,b) => (b.unread_count || 0) - (a.unread_count || 0));
-      const mapped = sorted.map(t => ({ uid: t.uid, title: t.title, first_name: t.first_name, last_name: t.last_name, unread_count: t.unread_count || 0, created_at: t.created_at, last_message: (t.messages && t.messages.length) ? t.messages[t.messages.length-1].content : '', is_open: t.is_open, closed_by: t.closed_by, closed_at: t.closed_at }));
+  const mapped = sorted.map(t => ({ uid: t.uid, ticket_number: t.ticket_number || t.id, title: t.title, first_name: t.first_name, last_name: t.last_name, unread_count: t.unread_count || 0, created_at: t.created_at, last_message: (t.messages && t.messages.length) ? t.messages[t.messages.length-1].content : '', is_open: t.is_open, closed_by: t.closed_by, closed_at: t.closed_at }));
   setTickets(mapped);
   setLoading(false);
   return;
@@ -138,46 +140,46 @@ export default function AdminPanel({ navigation }) {
   };
 
   return (
-    <View style={{ flex: 1, padding: 12 }}>
-      <Text style={{ fontWeight: 'bold', fontSize: 18 }}>Admin - Tickets</Text>
-      <View style={{ flexDirection: 'row', marginTop: 8, marginBottom: 8, alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', backgroundColor: '#eef', borderRadius: 20, padding: 4 }}>
-          {['not_complete','all','completed'].map(k => (
-            <TouchableOpacity key={k} onPress={() => setFilter(k)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: filter === k ? '#007bff' : 'transparent', marginRight: 6 }}>
-              <Text style={{ color: filter === k ? '#fff' : '#007bff', fontWeight: '600' }}>{k === 'not_complete' ? 'Not Complete' : (k === 'completed' ? 'Completed' : 'All')}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={{ width: 12 }} />
-        {loading ? <ActivityIndicator size="small" /> : null}
+    <View style={global.container}>
+      <Text style={global.header}>Admin - Tickets</Text>
+      <View style={{ marginTop: 8, marginBottom: 8 }}>
+        <PillToggle options={[{ value: 'not_complete', label: 'Not Complete' }, { value: 'all', label: 'All' }, { value: 'completed', label: 'Completed' }]} value={filter} onChange={setFilter} />
+  {loading ? <Loading text="Loading..." /> : null}
       </View>
-      {debug.me && <Text style={{ fontSize: 12, color: '#666' }}>Logged as: {debug.me.username} (staff: {String(debug.me.is_staff)})</Text>}
+      {debug.me && <Text style={global.smallText}>Logged as: {debug.me.username} (staff: {String(debug.me.is_staff)})</Text>}
+
       <View style={{ marginVertical: 8 }}>
-        <Button title="Refresh" onPress={load} />
-        <Text style={{ fontSize: 12, color: '#666' }}>Pending: {debug.pendingCount} | All: {debug.allCount}</Text>
-        {debug.pendingBody ? <Text numberOfLines={3} selectable style={{ fontSize: 11, color: '#999' }}>Pending raw: {debug.pendingBody}</Text> : null}
-        {debug.allBody ? <Text numberOfLines={3} selectable style={{ fontSize: 11, color: '#999' }}>All raw: {debug.allBody}</Text> : null}
+        <TouchableOpacity onPress={load} style={{ alignSelf: 'flex-start', paddingVertical: 6 }}>
+          <Text style={{ color: colors.primary }}>Refresh</Text>
+        </TouchableOpacity>
+        <Text style={global.smallText}>Pending: {debug.pendingCount} | All: {debug.allCount}</Text>
       </View>
+
       <FlatList data={tickets} keyExtractor={(t) => String(t.uid)} renderItem={({ item }) => (
-        <View style={{ padding: 8, borderBottomWidth: 1 }}>
+        <View style={global.card}>
             <TouchableOpacity onPress={() => navigation.navigate('Chat', { ticketUid: item.uid })}>
-            <Text style={{ fontWeight: 'bold' }}>{item.title} {item.unread_count ? `(${item.unread_count} new)` : ''}</Text>
-            <Text>{item.first_name} {item.last_name}</Text>
+            <Text style={{ fontWeight: '700' }}>#{item.ticket_number} {item.title} {item.unread_count ? `(${item.unread_count} new)` : ''}</Text>
+            <Text style={global.subText}>{item.first_name} {item.last_name}</Text>
             <Text style={{ color: '#555' }}>{item.last_message}</Text>
-            <Text style={{ color: '#999', fontSize: 12 }}>{item.created_at}</Text>
-            {!item.is_open && <Text style={{ color: 'green', fontWeight: 'bold' }}>Completed</Text>}
-            {item.closed_by ? <Text style={{ fontSize: 12, color: '#666' }}>Closed by: {item.closed_by} at {formatTimestamp(item.closed_at)}</Text> : null}
+            <Text style={global.smallText}>{item.created_at}</Text>
+            {!item.is_open && <Text style={{ color: colors.success, fontWeight: 'bold' }}>Completed</Text>}
+            {item.closed_by ? <Text style={global.smallText}>Closed by: {item.closed_by} at {formatTimestamp(item.closed_at)}</Text> : null}
           </TouchableOpacity>
 
           <View style={{ flexDirection: 'row', marginTop: 8 }}>
-            <Button title={item.is_open ? 'Mark Complete' : 'Reopen'} onPress={() => doAction(item.uid, item.is_open ? 'close' : 'reopen')} />
-            <View style={{ width: 8 }} />
-            <Button title="Assign to me" onPress={async () => { const id = await AsyncStorage.getItem('userId'); doAction(item.uid, 'assign', id); }} />
+            <TouchableOpacity onPress={() => doAction(item.uid, item.is_open ? 'close' : 'reopen')} style={{ marginRight: 8 }}>
+              <Text style={{ color: colors.primary }}>{item.is_open ? 'Mark Complete' : 'Reopen'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={async () => { const id = await AsyncStorage.getItem('userId'); doAction(item.uid, 'assign', id); }}>
+              <Text style={{ color: colors.primary }}>Assign to me</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={{ marginTop: 8 }}>
-            <TextInput value={replyMap[item.uid] || ''} onChangeText={(v) => setReplyMap(m => ({ ...m, [item.uid]: v }))} placeholder="Write reply..." style={{ borderWidth: 1, marginBottom: 8 }} />
-            <Button title="Send Reply" onPress={() => sendReply(item.uid)} />
+            <TextInput value={replyMap[item.uid] || ''} onChangeText={(v) => setReplyMap(m => ({ ...m, [item.uid]: v }))} placeholder="Write reply..." style={global.input} />
+            <TouchableOpacity onPress={() => sendReply(item.uid)} style={global.button}>
+              <Text style={global.buttonText}>Send Reply</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )} />

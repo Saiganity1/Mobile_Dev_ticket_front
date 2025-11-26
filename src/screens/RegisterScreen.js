@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, TextInput, Button, Text, Alert } from 'react-native';
+import styles, { global, colors } from '../styles';
+import Loading from '../components/Loading';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -48,21 +50,27 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    <View style={{ padding: 16 }}>
-      <Text>Username</Text>
-      <TextInput value={username} onChangeText={setUsername} style={{ borderWidth: 1, marginBottom: 8 }} />
-  {errors.username && <Text style={{ color: 'red' }}>{Array.isArray(errors.username) ? errors.username.join(', ') : String(errors.username)}</Text>}
-      <Text>First Name</Text>
-      <TextInput value={firstName} onChangeText={setFirstName} style={{ borderWidth: 1, marginBottom: 8 }} />
-      <Text>Last Name</Text>
-      <TextInput value={lastName} onChangeText={setLastName} style={{ borderWidth: 1, marginBottom: 8 }} />
-      <Text>Email</Text>
-      <TextInput value={email} onChangeText={setEmail} style={{ borderWidth: 1, marginBottom: 8 }} />
-  {errors.email && <Text style={{ color: 'red' }}>{Array.isArray(errors.email) ? errors.email.join(', ') : String(errors.email)}</Text>}
-      <Text>Password</Text>
-      <TextInput value={password} onChangeText={setPassword} secureTextEntry style={{ borderWidth: 1, marginBottom: 8 }} />
-  {errors.password && <Text style={{ color: 'red' }}>{Array.isArray(errors.password) ? errors.password.join(', ') : String(errors.password)}</Text>}
-      <Button title={loading ? 'Registering...' : 'Register'} onPress={register} disabled={loading} />
+    <View style={global.container}>
+      <View style={global.card}>
+        <Text style={global.header}>Register</Text>
+        <Text style={global.subText}>Create a new account</Text>
+        <View style={{ height: 12 }} />
+        <Text>Username</Text>
+        <TextInput value={username} onChangeText={setUsername} style={global.input} />
+        {errors.username && <Text style={{ color: colors.danger }}>{Array.isArray(errors.username) ? errors.username.join(', ') : String(errors.username)}</Text>}
+        <Text>First Name</Text>
+        <TextInput value={firstName} onChangeText={setFirstName} style={global.input} />
+        <Text>Last Name</Text>
+        <TextInput value={lastName} onChangeText={setLastName} style={global.input} />
+        <Text>Email</Text>
+        <TextInput value={email} onChangeText={setEmail} style={global.input} />
+        {errors.email && <Text style={{ color: colors.danger }}>{Array.isArray(errors.email) ? errors.email.join(', ') : String(errors.email)}</Text>}
+        <Text>Password</Text>
+        <TextInput value={password} onChangeText={setPassword} secureTextEntry style={global.input} />
+        {errors.password && <Text style={{ color: colors.danger }}>{Array.isArray(errors.password) ? errors.password.join(', ') : String(errors.password)}</Text>}
+        <View style={{ height: 12 }} />
+        {loading ? <Loading text="Registering..." /> : <Button title="Register" onPress={register} />}
+      </View>
     </View>
   );
 }

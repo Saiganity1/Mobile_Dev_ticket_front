@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Button, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import styles, { global, colors } from '../styles';
+import Loading from '../components/Loading';
 
 const API_BASE = Platform.OS === 'web'
   ? `http://${window.location.hostname}:8000/api`
@@ -50,19 +52,19 @@ export default function MyReportsScreen({ navigation }) {
   useEffect(() => { loadPage(); }, []);
 
   return (
-    <View style={{ flex: 1, padding: 12 }}>
-      <Text style={{ fontWeight: 'bold', fontSize: 18 }}>My Reports</Text>
-      {tickets.length === 0 && <Text>No reports yet</Text>}
+    <View style={global.container}>
+      <Text style={global.header}>My Reports</Text>
+      {tickets.length === 0 && <Text style={global.subText}>No reports yet</Text>}
       <FlatList data={tickets} keyExtractor={(t) => String(t.uid)} renderItem={({ item }) => (
-        <TouchableOpacity onPress={() => navigation.navigate('Chat', { ticketUid: item.uid })} style={{ padding: 8, borderBottomWidth: 1 }}>
+        <TouchableOpacity onPress={() => navigation.navigate('Chat', { ticketUid: item.uid })} style={global.card}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontWeight: 'bold' }}>{item.title} {item.unread_count ? `(${item.unread_count} new)` : ''}</Text>
-            {!item.is_open && <Text style={{ color: 'green', fontWeight: 'bold' }}>Completed</Text>}
+            <Text style={{ fontWeight: '700' }}>#{item.ticket_number || item.id} {item.title} {item.unread_count ? `(${item.unread_count} new)` : ''}</Text>
+            {!item.is_open && <Text style={{ color: colors.success, fontWeight: '700' }}>Completed</Text>}
           </View>
-          <Text>{item.first_name} {item.last_name}</Text>
+          <Text style={global.subText}>{item.first_name} {item.last_name}</Text>
         </TouchableOpacity>
       )} />
-      {nextPage && <Button title={loading ? 'Loading...' : 'Load more'} onPress={() => loadPage(nextPage)} disabled={loading} />}
+      {nextPage && (loading ? <Loading text="Loading..." /> : <TouchableOpacity onPress={() => loadPage(nextPage)}><Text style={{ color: colors.primary }}>Load more</Text></TouchableOpacity>)}
     </View>
   );
 }
