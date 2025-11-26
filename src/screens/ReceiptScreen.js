@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Alert, Share, Platform, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Share, Platform, TextInput, ScrollView } from 'react-native';
 import styles, { useThemedStyles, colors } from '../styles';
 import Loading from '../components/Loading';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,10 +15,7 @@ export default function ReceiptScreen({ route, navigation }) {
   const [firstNameInput, setFirstNameInput] = useState('');
   const [lastNameInput, setLastNameInput] = useState('');
 
-  useEffect(() => {
-    fetchReceipt();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { fetchReceipt(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const fetchReceipt = async (opts = {}) => {
     setLoading(true);
@@ -28,7 +25,6 @@ export default function ReceiptScreen({ route, navigation }) {
       if (ticketNumber) url = `${API_BASE}/tickets/${ticketNumber}/receipt/`;
       else if (ticketUid) url = `${API_BASE}/tickets/${ticketUid}/receipt/`;
       else { Alert.alert('Missing ticket id'); setLoading(false); return; }
-      // append query params if supplied
       const params = [];
       const fn = opts.first_name || firstNameInput;
       const ln = opts.last_name || lastNameInput;
@@ -36,70 +32,43 @@ export default function ReceiptScreen({ route, navigation }) {
       if (ln) params.push(`last_name=${encodeURIComponent(ln)}`);
       const finalUrl = params.length ? `${url}?${params.join('&')}` : url;
       const res = await fetch(finalUrl, { headers: token ? { Authorization: `Token ${token}` } : {} });
-      if (res.status === 401) {
-        // show inline prompt for names
-        setNeedNames(true);
-        setReceipt(null);
-        setLoading(false);
-        return;
-      }
+      if (res.status === 401) { setNeedNames(true); setReceipt(null); setLoading(false); return; }
       if (!res.ok) { Alert.alert('Failed to load receipt'); setLoading(false); return; }
       const data = await res.json();
       setReceipt(data);
       setNeedNames(false);
-    } catch (e) {
-      Alert.alert('Failed to load receipt', String(e));
-    } finally { setLoading(false); }
+    } catch (e) { Alert.alert('Failed to load receipt', String(e)); }
+    finally { setLoading(false); }
   };
-
 
   const onShare = async () => {
     if (!receipt) return;
     const txt = `Ticket #${receipt.ticket_number}\nName: ${receipt.first_name} ${receipt.last_name}\nIssue: ${receipt.title}\nDescription: ${receipt.description}\nCreated: ${receipt.created_at}`;
     try {
-      if (Platform.OS === 'web') {
-        await navigator.clipboard.writeText(txt);
-        Alert.alert('Copied', 'Receipt copied to clipboard');
-      } else {
-        await Share.share({ message: txt });
-      }
-    } catch (e) {
-      Alert.alert('Share failed', String(e));
-    }
+      if (Platform.OS === 'web') { await navigator.clipboard.writeText(txt); Alert.alert('Copied', 'Receipt copied to clipboard'); }
+      else { await Share.share({ message: txt }); }
+    } catch (e) { Alert.alert('Share failed', String(e)); }
   };
 
   const onDownloadPdf = async () => {
     if (!receipt) return;
     const token = await AsyncStorage.getItem('authToken');
     const url = `${API_BASE}/tickets/${receipt.ticket_number}/receipt.pdf`;
-    // prefer explicit inputs, fallback to receipt names when available
     const fn = firstNameInput || receipt.first_name || '';
     const ln = lastNameInput || receipt.last_name || '';
-    const body = new URLSearchParams();
-    if (fn) body.append('first_name', fn);
-    if (ln) body.append('last_name', ln);
+    const body = new URLSearchParams(); if (fn) body.append('first_name', fn); if (ln) body.append('last_name', ln);
     try {
       if (Platform.OS === 'web') {
         const res = await fetch(url, { method: 'POST', headers: token ? { Authorization: `Token ${token}` } : {}, body });
         if (!res.ok) { Alert.alert('Download failed'); return; }
-        const blob = await res.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
-        return;
+        const blob = await res.blob(); const blobUrl = window.URL.createObjectURL(blob); window.open(blobUrl, '_blank'); return;
       }
-
       const res = await fetch(url, { method: 'POST', headers: token ? { Authorization: `Token ${token}` } : {}, body });
       if (!res.ok) { Alert.alert('Download failed'); return; }
-      const blob = await res.blob();
-      const fileReader = new FileReader();
-      fileReader.onload = async () => {
-        const base64 = fileReader.result;
-        try { await Share.share({ url: base64 }); } catch (e) { Alert.alert('Share failed', String(e)); }
-      };
+      const blob = await res.blob(); const fileReader = new FileReader();
+      fileReader.onload = async () => { const base64 = fileReader.result; try { await Share.share({ url: base64 }); } catch (e) { Alert.alert('Share failed', String(e)); } };
       fileReader.readAsDataURL(blob);
-    } catch (e) {
-      Alert.alert('Download failed', String(e));
-    }
+    } catch (e) { Alert.alert('Download failed', String(e)); }
   };
 
   if (loading) return <View style={s.container}><Loading /></View>;
@@ -125,19 +94,52 @@ export default function ReceiptScreen({ route, navigation }) {
     );
   }
 
+  const statusText = receipt.is_open ? 'Currently Solving' : 'Solved';
+  const statusColor = receipt.is_open ? '#fb923c' : '#22c55e';
+
   return (
-    <View style={s.container}>
-      <Text style={s.header}>Receipt</Text>
-      <View style={s.card}>
-        <Text style={{ fontWeight: '800' }}>Ticket #{receipt.ticket_number}</Text>
-        <Text style={s.subText}>Name: {receipt.first_name} {receipt.last_name}</Text>
-        <Text style={[s.subText, { marginTop: 6 }]}>Issue: {receipt.title}</Text>
-        <Text style={[s.subText, { marginTop: 6 }]}>{receipt.description}</Text>
-        <Text style={[s.subText, { marginTop: 8 }]}>Created: {receipt.created_at}</Text>
+    <ScrollView style={s.container} contentContainerStyle={{ alignItems: 'center', paddingVertical: 18 }}>
+      <View style={{ width: '100%', maxWidth: 720, paddingHorizontal: 12, alignItems: 'center' }}>
+        <Text style={[s.header, { alignSelf: 'center' }]}>Receipt</Text>
+
+        <View style={{ width: '100%', maxWidth: 480, marginTop: 8 }}>
+          <View style={{
+            backgroundColor: '#fff',
+            borderRadius: 12,
+            padding: 12,
+            position: 'relative',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            elevation: 6,
+            borderWidth: 1,
+            borderColor: '#eef2f7'
+          }}>
+
+            {/* Header row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontWeight: '800', fontSize: 16, color: '#0f172a' }}>Chat Support System</Text>
+              <View style={{ flex: 1 }} />
+              {/* status badge positioned inside the row to overlay top-right visually */}
+              <View style={{ backgroundColor: statusColor, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, alignSelf: 'flex-start' }}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>{statusText}</Text>
+              </View>
+            </View>
+
+            <Text style={[s.subText, { marginTop: 10, color: '#475569' }]}>Ticket #{receipt.ticket_number}</Text>
+            <Text style={[s.subText, { marginTop: 6, color: '#475569' }]}>Name: {receipt.first_name} {receipt.last_name}</Text>
+            <Text style={[s.subText, { marginTop: 8, fontWeight: '700', color: '#0f172a' }]}>Issue: {receipt.title}</Text>
+            <Text style={[s.subText, { marginTop: 6, color: '#334155' }]} numberOfLines={6}>{receipt.description}</Text>
+            <Text style={[s.subText, { marginTop: 8, color: '#64748b' }]}>Created: {receipt.created_at}</Text>
+
+            <View style={{ marginTop: 12 }} />
+            <TouchableOpacity onPress={onShare} style={{ backgroundColor: '#0f172a', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}><Text style={{ color: '#fff', fontWeight: '700' }}>Copy/Share</Text></TouchableOpacity>
+            <View style={{ height: 8 }} />
+            <TouchableOpacity onPress={onDownloadPdf} style={{ backgroundColor: '#0f172a', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}><Text style={{ color: '#fff', fontWeight: '700' }}>Download PDF</Text></TouchableOpacity>
+          </View>
+        </View>
       </View>
-  <TouchableOpacity onPress={onShare} style={s.button}><Text style={s.buttonText}>Copy/Share</Text></TouchableOpacity>
-  <View style={{ height: 8 }} />
-  <TouchableOpacity onPress={onDownloadPdf} style={s.button}><Text style={s.buttonText}>Download PDF</Text></TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
